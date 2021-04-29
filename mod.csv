@@ -1,0 +1,14 @@
+
+//MAPS
+rawfile,maps/_zombiemode.gsc
+rawfile,maps/_zombiemode_perks.gsc
+rawfile,maps/_zombiemode_weapons.gsc
+
+//CLIENTSCRIPTS
+rawfile,clientscripts/_zombiemode_ffotd.csc
+
+//MENU
+menufile,ui/objective_info.menu
+menufile,ui/options_game_pc.menu
+menufile,ui/hud_zombie.menu
+
