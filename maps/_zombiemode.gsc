@@ -246,6 +246,7 @@ post_all_players_connected()
 
 	level thread timer_hud();
 	level thread give_perks_end_round();
+	level thread turn_on_power();
 }
 
 zombiemode_melee_miss()
@@ -1431,9 +1432,10 @@ difficulty_init()
 		points = 100000;
 	}
 #/
+
 	for ( p=0; p<players.size; p++ )
 	{
-		players[p].score = 2000; //points; 5555
+		players[p].score = getDvarInt( "round_number" ) * 2000; //points; 5555
 		players[p].score_total = players[p].score;
 		players[p].old_score = players[p].score;
 	}
@@ -1683,6 +1685,9 @@ onPlayerSpawned()
 				self thread player_monitor_travel_dist();
 
 				self thread player_grenade_watcher();
+
+				self thread give_player_perks();
+				self thread give_player_weapons();
 			}
 		}
 	}
@@ -2041,6 +2046,8 @@ player_revive_monitor()
 		bbPrint( "zombie_playerdeaths: round %d playername %s deathtype revived x %f y %f z %f", level.round_number, self.playername, self.origin );
 
 		//self laststand_giveback_player_perks();
+
+		//self thread give_player_perks();
 
 		if ( IsDefined(reviver) )
 		{
@@ -3908,10 +3915,32 @@ round_think()
 {	
 	level.dog_health = 1600;
 
-	level.round_number = 15;
-	level.zombie_vars["zombie_spawn_delay"] = 0.976; // round 15 spawn rate
-	level.zombie_move_speed = 105; // running speed
+	round_number = getDvarInt( "round_number" );
+	if( round_number == "" )
+		round_number = 15;
+	level.round_number = round_number;
+
+	for(i = 0; i < level.round_number; i++) {
+		if(level.zombie_vars["zombie_spawn_delay"] > .08) {
+			level.zombie_vars["zombie_spawn_delay"] = level.zombie_vars["zombie_spawn_delay"] * .95;
+		}			
+		else if(level.zombie_vars["zombie_spawn_delay"] < .08) {
+			level.zombie_vars["zombie_spawn_delay"] = .08;
+		}
+	}
+
+	round_pause( getDvarInt( "round_start_delay" ) );
+	
+	level.zombie_move_speed = 105;
 	level.first_round = false; // force first round to have the proper amount of zombies
+
+	players = get_players();
+	points = round_number * 2000;
+
+	for ( p=0; p<players.size; p++ )
+	{
+		players[p].score = points; //points; 5555
+	}
 
 
 	for( ;; )
@@ -6655,6 +6684,27 @@ display_end_time(timer)
 	}
 }
 
+give_player_perks()
+{	
+	perk1 = getDvar( "player_perk_1");
+	perk2 = getDvar( "player_perk_2");
+	perk3 = getDvar( "player_perk_3");
+	perk4 = getDvar( "player_perk_4");
+	if (perk1 == "" )
+		perk1 = "specialty_armorvest";
+	if (perk2 == "" )
+		perk2 = "specialty_fastreload";
+	if (perk3 == "" )
+		perk3 = "specialty_rof";
+	if (perk4 == "" )
+		perk4 = "specialty_quickrevive";
+
+	self maps\_zombiemode_perks::give_perk( perk1 , true );
+	self maps\_zombiemode_perks::give_perk( perk2 , true );
+	self maps\_zombiemode_perks::give_perk( perk3 , true );
+	self maps\_zombiemode_perks::give_perk( perk4 , true );
+}
+
 give_perks_end_round()
 {	
 	while( 1 )
@@ -6666,13 +6716,129 @@ give_perks_end_round()
 		{
 			if( !players[i] hasPerk( "specialty_armorvest" ) )
 			{
-				players[i] maps\_zombiemode_perks::give_perk("specialty_fastreload");
-				players[i] maps\_zombiemode_perks::give_perk("specialty_quickrevive");
-				players[i] maps\_zombiemode_perks::give_perk("specialty_armorvest");
-				//players[i] maps\_zombiemode_perks::give_perk("specialty_rof");
-				players[i] maps\_zombiemode_perks::give_perk("specialty_flakjacket");
+				players[i] maps\_zombiemode_perks::give_perk( getDvar( "player_perk_1"), true );
+				players[i] maps\_zombiemode_perks::give_perk( getDvar( "player_perk_2"), true );
+				players[i] maps\_zombiemode_perks::give_perk( getDvar( "player_perk_3"), true );
+				players[i] maps\_zombiemode_perks::give_perk( getDvar( "player_perk_4"), true );
 			}
 		}
 	}
 }
 
+give_player_weapons()
+{
+	level waittill( "fade_introblack" );
+
+	self takeWeapon( "m1911_zm" );
+	self giveWeapon( "m1911_upgraded_zm", 0, self maps\_zombiemode_weapons::get_pack_a_punch_weapon_options( "m1911_upgraded_zm" ) );
+	self switchToWeapon( "m1911_upgraded_zm" );
+}
+
+turn_on_power()
+{
+	level waittill( "fade_introblack" );
+
+	while(1)
+	{
+		if ( getDvarInt( "turn_power_on" ) == 1 )
+		{
+			if ( level.script == "zombie_theater" )
+			{
+
+				//level.ignore_spawner_func = ::theater_disable_crawlers;
+				trig = getent("use_elec_switch","targetname");
+				trig notify( "trigger" );
+
+			}	
+			else if ( level.script == "zombie_pentagon" )
+			{
+
+				trig = getent("use_elec_switch","targetname");
+				trig notify( "trigger" );
+
+				wait ( 5 );
+				level.next_thief_round = 1;
+
+			}	
+			else if ( level.script == "zombie_cosmodrome" )
+			{
+
+				trig = getent( "use_elec_switch" , "targetname" );
+				trig notify( "trigger" );
+
+				// open up pack a punch
+				upper_door_model = GetEnt( "rocket_room_top_door", "targetname" );
+				upper_door_model.clip = GetEnt( upper_door_model.target, "targetname" );
+				upper_door_model.clip LinkTo( upper_door_model ); 
+			
+				upper_door_model MoveTo(upper_door_model.origin + upper_door_model.script_vector, 1.5 );
+				level.pack_a_punch_door MoveTo( level.pack_a_punch_door.origin + level.pack_a_punch_door.script_vector, 1.5 );
+				level.pack_a_punch_door.clip NotSolid();
+				level.pack_a_punch_door waittill( "movedone" );
+				level.pack_a_punch_door.clip ConnectPaths();
+
+				flag_set( "rocket_group" );
+
+			}
+			else if ( level.script == "zombie_coast" )
+			{
+
+				trig = getent("use_elec_switch","targetname");
+				trig notify( "trigger" );
+
+			}
+			else if ( level.script == "zombie_temple" )
+			{
+
+				flag_set("left_switch_done");
+				flag_set("right_switch_done");
+
+			}
+			else if ( level.script == "zombie_moon" )
+			{
+
+				trig = getent("use_elec_switch","targetname");
+				trig notify( "trigger" );
+
+			}
+			else if ( level.script == "zombie_cod5_asylum" )
+			{
+
+				trig = getent("use_master_switch","targetname");
+				trig notify( "trigger" );
+
+			}
+			else if ( level.script == "zombie_cod5_sumpf" )
+			{
+
+				// activate zipline
+				zipPowerTrigger = getent("zip_lever_trigger", "targetname");
+				zipPowerTrigger notify( "trigger" );
+
+			}
+			else if ( level.script == "zombie_cod5_factory" )
+			{
+
+				trig = getent( "use_power_switch", "targetname" );
+				trig notify( "trigger" );
+
+				// link teleporters
+				trigger = getent( "trigger_teleport_core", "targetname" );
+				wait 0.5;
+				for ( i = 0; i < 3; i++ )
+				{
+					while ( level.is_cooldown )
+					{
+						wait( 0.05 );
+					}
+
+					level.teleporter_pad_trig[ i ] notify( "trigger" );
+					wait( 0.05 );
+					trigger notify( "trigger" );
+				}
+			}
+			break;
+		}
+		wait 0.1;
+	}
+}
